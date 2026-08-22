@@ -6,7 +6,7 @@ import './App.css'
 const today = new Date().toISOString().slice(0, 10)
 const initialForm = {
   staffName: '', companyName: '', ownerName: '', dateAdded: today, status: 'pending',
-  startDate: '', description: '', city: '', address: '', mobile: '', price: '',
+  startDate: '', description: '', city: '', address: '', mobile: '', socialMediaLink: '', price: '',
 }
 
 function addOneYear(date) {
@@ -24,6 +24,7 @@ function App() {
   const [search, setSearch] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
   const [priceMin, setPriceMin] = useState('')
   const [priceMax, setPriceMax] = useState('')
   const [loading, setLoading] = useState(true)
@@ -37,12 +38,26 @@ function App() {
     const matchesSearch = Object.values(company).some((value) => String(value ?? '').toLowerCase().includes(search.trim().toLowerCase()))
     const matchesDateFrom = !dateFrom || (company.dateAdded && company.dateAdded >= dateFrom)
     const matchesDateTo = !dateTo || (company.dateAdded && company.dateAdded <= dateTo)
+    const matchesStatus = !statusFilter || (company.status || 'pending') === statusFilter
     const companyPrice = Number(company.price)
     const matchesPriceMin = priceMin === '' || (!Number.isNaN(companyPrice) && companyPrice >= Number(priceMin))
     const matchesPriceMax = priceMax === '' || (!Number.isNaN(companyPrice) && companyPrice <= Number(priceMax))
-    return matchesSearch && matchesDateFrom && matchesDateTo && matchesPriceMin && matchesPriceMax
+    return matchesSearch && matchesDateFrom && matchesDateTo && matchesStatus && matchesPriceMin && matchesPriceMax
   })
-  const hasFilters = search || dateFrom || dateTo || priceMin || priceMax
+  const hasFilters = search || dateFrom || dateTo || statusFilter || priceMin || priceMax
+  const analysis = companies.reduce((totals, company) => {
+    const status = company.status || 'pending'
+    if (status === 'accept') {
+      totals.accept += 1
+      const price = Number(company.price)
+      if (Number.isFinite(price)) totals.acceptedRevenue += price
+    } else if (status === 'reject') {
+      totals.reject += 1
+    } else {
+      totals.pending += 1
+    }
+    return totals
+  }, { accept: 0, reject: 0, pending: 0, acceptedRevenue: 0 })
 
   useEffect(() => onSnapshot(collection(db, 'companies'), (snapshot) => {
     const companyList = snapshot.docs.map((company) => ({ id: company.id, ...company.data() }))
@@ -75,6 +90,7 @@ function App() {
     setSearch('')
     setDateFrom('')
     setDateTo('')
+    setStatusFilter('')
     setPriceMin('')
     setPriceMax('')
   }
@@ -89,7 +105,7 @@ function App() {
         staffName: form.staffName.trim(), companyName: form.companyName.trim(), ownerName: form.ownerName.trim(),
         dateAdded: form.dateAdded, status: form.status, startDate: form.startDate,
         endDate, description: form.description.trim(), city: form.city.trim(),
-        address: form.address.trim(), mobile: form.mobile.trim(), price: Number(form.price),
+        address: form.address.trim(), mobile: form.mobile.trim(), socialMediaLink: form.socialMediaLink.trim(), price: Number(form.price),
       }
       if (isEditing && selectedCompany) {
         await updateDoc(doc(db, 'companies', selectedCompany.id), record)
@@ -129,6 +145,7 @@ function App() {
         <nav className="tabs" aria-label="Company pages">
           <button className={screen === 'companies' ? 'active' : ''} onClick={() => setScreen('companies')} type="button">All companies</button>
           <button className={screen === 'add' || screen === 'edit' ? 'active' : ''} onClick={openAdd} type="button">Add company</button>
+          <button className={screen === 'analysis' ? 'active' : ''} onClick={() => setScreen('analysis')} type="button">Analysis</button>
         </nav>
       </header>
       {error && <p className="notice error" role="alert">{error}</p>}
@@ -139,19 +156,29 @@ function App() {
           <form onSubmit={handleSubmit}>
             <fieldset className="form-section">
               <legend><span>01</span><div><strong>Staff information</strong><small>Details of the staff member managing this account.</small></div></legend>
-              <div className="field-grid single-field"><label>Staff name <span aria-hidden="true">*</span><input name="staffName" value={form.staffName} onChange={updateField} required autoFocus placeholder="Enter staff member name" /></label></div>
+              <div className="field-grid single-field"><label>Staff name <input name="staffName" value={form.staffName} onChange={updateField} autoFocus placeholder="Enter staff member name" /></label></div>
             </fieldset>
             <fieldset className="form-section">
               <legend><span>02</span><div><strong>Company information</strong><small>Core business details and agreement information.</small></div></legend>
-              <div className="field-grid"><label>Company name <span aria-hidden="true">*</span><input name="companyName" value={form.companyName} onChange={updateField} required placeholder="Enter company name" /></label><label>Company owner <span aria-hidden="true">*</span><input name="ownerName" value={form.ownerName} onChange={updateField} required placeholder="Enter owner name" /></label><label>Date added <span aria-hidden="true">*</span><input name="dateAdded" type="date" value={form.dateAdded} onChange={updateField} required /></label><label>Status <span aria-hidden="true">*</span><select name="status" value={form.status} onChange={updateField}><option value="pending">Pending</option><option value="accept">Accept</option><option value="reject">Reject</option></select></label><label>Start date <span aria-hidden="true">*</span><input name="startDate" type="date" value={form.startDate} onChange={updateField} required /></label><label>End date <span aria-hidden="true">*</span><input type="date" value={endDate} readOnly required aria-describedby="end-date-help" /><small id="end-date-help">Automatically calculated from the start date.</small></label><label>Price <span aria-hidden="true">*</span><input name="price" type="number" min="0" step="0.01" value={form.price} onChange={updateField} placeholder="0.00" required /></label><label className="field-spacer" aria-hidden="true" /></div>
+              <div className="field-grid"><label>Company name <input name="companyName" value={form.companyName} onChange={updateField}  placeholder="Enter company name" /></label><label>Company owner <input name="ownerName" value={form.ownerName} onChange={updateField}  placeholder="Enter owner name" /></label><label>Date added <input name="dateAdded" type="date" value={form.dateAdded} onChange={updateField} /></label><label>Status <select name="status" value={form.status} onChange={updateField}><option value="pending">Pending</option><option value="accept">Accept</option><option value="reject">Reject</option></select></label><label>Start date <input name="startDate" type="date" value={form.startDate} onChange={updateField}  /></label><label>End date <input type="date" value={endDate} readOnly  aria-describedby="end-date-help" /><small id="end-date-help">Automatically calculated from the start date.</small></label><label>Price <input name="price" type="number" min="0" step="0.01" value={form.price} onChange={updateField} placeholder="0.00"  /></label><label className="field-spacer" aria-hidden="true" /></div>
               <div className="field-grid"><label className="full-width">Notes <span className="optional">(optional)</span><textarea name="description" value={form.description} onChange={updateField} rows="4" placeholder="Add any relevant notes or context" /></label></div>
             </fieldset>
             <fieldset className="form-section">
               <legend><span>03</span><div><strong>Company address</strong><small>Primary location and contact information for the company.</small></div></legend>
-              <div className="field-grid"><label>City <span aria-hidden="true">*</span><input name="city" value={form.city} onChange={updateField} required placeholder="Enter city" /></label><label>Company mobile <span aria-hidden="true">*</span><input name="mobile" type="tel" value={form.mobile} onChange={updateField} placeholder="+1 555 000 0000" required /></label><label className="full-width">Street address <span aria-hidden="true">*</span><input name="address" value={form.address} onChange={updateField} required placeholder="Building, street, and area" /></label></div>
+              <div className="field-grid"><label>City <input name="city" value={form.city} onChange={updateField}  placeholder="Enter city" /></label><label>Company mobile <input name="mobile" type="tel" value={form.mobile} onChange={updateField} placeholder="+1 555 000 0000"  /></label><label className="full-width">Street address <input name="address" value={form.address} onChange={updateField}  placeholder="Building, street, and area" /></label><label className="full-width">Social media link <span className="optional">(optional)</span><input name="socialMediaLink" type="url" value={form.socialMediaLink} onChange={updateField} placeholder="https://linkedin.com/company/example" /></label></div>
             </fieldset>
             <div className="form-actions"><button type="button" className="secondary" onClick={() => setScreen('companies')}>Cancel</button><button type="submit" className="primary" disabled={saving}>{saving ? 'Saving…' : isEditing ? 'Save changes' : 'Save company'}</button></div>
           </form>
+        </section>
+      ) : screen === 'analysis' ? (
+        <section className="card analysis-card" aria-labelledby="analysis-title">
+          <div className="analysis-heading"><div><span className="form-kicker">Company overview</span><h2 id="analysis-title">Analysis</h2><p>Status breakdown and revenue from accepted companies.</p></div><p className="analysis-total">{loading ? 'Loading records…' : `${companies.length} total companies`}</p></div>
+          <div className="analysis-grid">
+            <article className="analysis-stat accept"><span>Accepted</span><strong>{analysis.accept}</strong><small>Companies accepted</small></article>
+            <article className="analysis-stat reject"><span>Rejected</span><strong>{analysis.reject}</strong><small>Companies rejected</small></article>
+            <article className="analysis-stat pending"><span>Pending</span><strong>{analysis.pending}</strong><small>Companies awaiting a decision</small></article>
+            <article className="analysis-stat revenue"><span>Accepted revenue</span><strong>{analysis.acceptedRevenue.toLocaleString(undefined, { style: 'currency', currency: 'USD' })}</strong><small>Total price from accepted companies only</small></article>
+          </div>
         </section>
       ) : screen === 'view' && selectedCompany ? (
         <section className="card detail-card" aria-labelledby="company-detail-title">
@@ -159,7 +186,7 @@ function App() {
           <div className="detail-sections">
             <div className="detail-section"><h3>Staff information</h3><dl><div><dt>Staff name</dt><dd>{selectedCompany.staffName || '—'}</dd></div></dl></div>
             <div className="detail-section"><h3>Company information</h3><dl><div><dt>Company owner</dt><dd>{selectedCompany.ownerName || '—'}</dd></div><div><dt>Date added</dt><dd>{selectedCompany.dateAdded || '—'}</dd></div><div><dt>Start date</dt><dd>{selectedCompany.startDate || '—'}</dd></div><div><dt>End date</dt><dd>{selectedCompany.endDate || '—'}</dd></div><div><dt>Price</dt><dd>{typeof selectedCompany.price === 'number' ? selectedCompany.price.toLocaleString(undefined, { style: 'currency', currency: 'USD' }) : '—'}</dd></div><div className="detail-wide"><dt>Notes</dt><dd>{selectedCompany.description || 'No notes added.'}</dd></div></dl></div>
-            <div className="detail-section"><h3>Company address</h3><dl><div><dt>City</dt><dd>{selectedCompany.city || '—'}</dd></div><div><dt>Mobile</dt><dd>{selectedCompany.mobile || '—'}</dd></div><div className="detail-wide"><dt>Street address</dt><dd>{selectedCompany.address || '—'}</dd></div></dl></div>
+            <div className="detail-section"><h3>Company address</h3><dl><div><dt>City</dt><dd>{selectedCompany.city || '—'}</dd></div><div><dt>Mobile</dt><dd>{selectedCompany.mobile || '—'}</dd></div><div className="detail-wide"><dt>Street address</dt><dd>{selectedCompany.address || '—'}</dd></div><div className="detail-wide"><dt>Social media</dt><dd>{selectedCompany.socialMediaLink ? <a href={selectedCompany.socialMediaLink} target="_blank" rel="noreferrer">{selectedCompany.socialMediaLink}</a> : '—'}</dd></div></dl></div>
           </div>
           <div className="form-actions"><button type="button" className="secondary" onClick={() => setScreen('companies')}>Back to companies</button><button type="button" className="primary" onClick={() => openEdit(selectedCompany)}>Edit company</button></div>
         </section>
@@ -167,7 +194,7 @@ function App() {
         <section className="card" aria-labelledby="company-list-title">
           <div className="list-heading"><div><h2 id="company-list-title">All company records</h2><p>Search or filter across all saved company information.</p></div><button className="primary" type="button" onClick={openAdd}>Add company</button></div>
           <div className="list-tools"><label className="search-field"><span className="sr-only">Search companies</span><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search companies, staff, mobile, status..." /></label><p>{loading ? 'Loading records…' : `${visibleCompanies.length} of ${companies.length} records`}</p></div>
-          <div className="filter-panel" aria-label="Filter company records"><div className="filter-heading"><strong>Filter records</strong><button type="button" className="clear-filters" onClick={clearFilters} disabled={!hasFilters}>Clear filters</button></div><div className="filter-fields"><label>Date added from<input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} max={dateTo || undefined} /></label><label>Date added to<input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} min={dateFrom || undefined} /></label><label>Minimum price<input type="number" min="0" step="0.01" value={priceMin} onChange={(event) => setPriceMin(event.target.value)} placeholder="0.00" /></label><label>Maximum price<input type="number" min="0" step="0.01" value={priceMax} onChange={(event) => setPriceMax(event.target.value)} placeholder="No limit" /></label></div></div>
+          <div className="filter-panel" aria-label="Filter company records"><div className="filter-heading"><strong>Filter records</strong><button type="button" className="clear-filters" onClick={clearFilters} disabled={!hasFilters}>Clear filters</button></div><div className="filter-fields"><label>Date added from<input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} max={dateTo || undefined} /></label><label>Date added to<input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} min={dateFrom || undefined} /></label><label>Status<select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="">All statuses</option><option value="pending">Pending</option><option value="accept">Accept</option><option value="reject">Reject</option></select></label><label>Minimum price<input type="number" min="0" step="0.01" value={priceMin} onChange={(event) => setPriceMin(event.target.value)} placeholder="0.00" /></label><label>Maximum price<input type="number" min="0" step="0.01" value={priceMax} onChange={(event) => setPriceMax(event.target.value)} placeholder="No limit" /></label></div></div>
           <div className="table-wrap"><table><thead><tr><th>Staff</th><th>Company</th><th>Owner</th><th>Status</th><th>Mobile</th><th><span className="sr-only">Actions</span></th></tr></thead><tbody>
             {loading && <tr><td colSpan="6" className="empty-state">Loading companies…</td></tr>}
             {!loading && companies.length === 0 && <tr><td colSpan="6" className="empty-state">No company records yet. Add your first one.</td></tr>}
