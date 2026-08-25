@@ -1,7 +1,8 @@
 import { getApp, getApps, initializeApp } from 'firebase/app'
+import { getAuth } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
 
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
@@ -13,3 +14,4 @@ const firebaseConfig = {
 // Reuse the initialized app during Vite hot-module reloads.
 export const firebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig)
 export const db = getFirestore(firebaseApp)
+export const auth = getAuth(firebaseApp)
